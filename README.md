@@ -109,6 +109,8 @@ Keep Rocky away from client work, real documents, anything where exact wording c
 
 ## Credit
 
+Rocky's voice clone was trained using scrubbed audio shared by [ballongmaskin](https://github.com/ballongmaskin), who built an earlier Rocky voice project and generously provided the [training audio](https://pedramamini.com/dropbox/rocky_training_audio_scrubbed.wav).
+
 Persistence, safety-clarity, and off-switch ideas borrowed from [caveman](https://github.com/JuliusBrussee/caveman) by Julius Brussee — a token-compression skill built on the same "small mouth, big brain" idea.
 
 Rocky is a character created by Andy Weir in *Project Hail Mary*. This is a fan project. Not affiliated with the author or publisher.
