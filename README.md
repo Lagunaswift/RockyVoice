@@ -78,12 +78,26 @@ Add this to `.claude/settings.local.json`:
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /path/to/rocky-tts && node server.js",
+            "async": true,
+            "statusMessage": "Starting Rocky voice..."
+          }
+        ]
+      }
     ]
   }
 }
 ```
 
-Then activate the Rocky skill, leave the browser tab open, and every response speaks automatically.
+The `Stop` hook sends Rocky's words to the voice server after every response. The `SessionStart` hook starts the server automatically when you open Claude Code — no manual `npm start` needed. Change `/path/to/rocky-tts` to wherever you cloned the repo.
+
+Then activate the Rocky skill, open **http://localhost:3333** in your browser, click "enable Rocky voice" once, and every response speaks automatically.
 
 ### Voice ID
 
