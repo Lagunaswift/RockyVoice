@@ -1,5 +1,6 @@
 require("dotenv").config();
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
 
 const app = express();
@@ -24,6 +25,22 @@ function broadcast(data) {
   for (const client of sseClients) client.write(msg);
 }
 
+function cleanForSpeech(raw) {
+  let t = raw;
+  t = t.replace(/```[\s\S]*?```/g, "");
+  t = t.replace(/`[^`]+`/g, "");
+  t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  t = t.replace(/https?:\/\/\S+/g, "");
+  t = t.replace(/#{1,6}\s*/g, "");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
+  t = t.replace(/\*([^*]+)\*/g, "$1");
+  t = t.replace(/^[-*]\s+/gm, "");
+  t = t.replace(/\n{2,}/g, "\n");
+  t = t.trim();
+  if (t.length > 1000) t = t.slice(0, 1000) + "...";
+  return t;
+}
+
 async function synthesize(text) {
   const response = await fetch("https://api.hume.ai/v0/tts", {
     method: "POST",
@@ -35,9 +52,7 @@ async function synthesize(text) {
       utterances: [
         {
           text,
-          voice: process.env.HUME_VOICE_ID
-            ? { id: process.env.HUME_VOICE_ID }
-            : undefined,
+          voice: { id: process.env.HUME_VOICE_ID },
           description:
             "Alien engineer speaking broken English. Deliberate. Each word placed carefully. Warm but strange.",
           speed: 1.25,
@@ -81,10 +96,23 @@ app.post("/api/speak", async (req, res) => {
 });
 
 app.post("/api/hook", async (req, res) => {
-  const text = req.body.last_assistant_message || null;
+  const hookData = req.body;
+  fs.appendFileSync(
+    path.join(__dirname, "hook-log.jsonl"),
+    JSON.stringify(hookData) + "\n"
+  );
+
+  const raw = hookData.last_assistant_message || null;
+
+  if (!raw) {
+    res.json({ ok: true, note: "no text found in hook data" });
+    return;
+  }
+
+  const text = cleanForSpeech(raw);
 
   if (!text) {
-    res.json({ ok: true, note: "no text found in hook data" });
+    res.json({ ok: true, note: "nothing speakable after cleaning" });
     return;
   }
 
