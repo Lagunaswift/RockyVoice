@@ -15,6 +15,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       padding: 2rem;
     }
 
@@ -38,6 +39,37 @@
       max-width: 640px;
     }
 
+    #startScreen {
+      text-align: center;
+      padding: 4rem 0;
+    }
+
+    #startScreen button {
+      font-family: inherit;
+      font-size: 1.1rem;
+      letter-spacing: 0.1em;
+      padding: 1.2rem 2.5rem;
+      border-radius: 8px;
+      border: 1px solid #8a7a60;
+      background: #1a1a1a;
+      color: #e0ddd5;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #startScreen button:hover {
+      background: #242420;
+      border-color: #b8a878;
+    }
+
+    #startScreen p {
+      font-size: 0.75rem;
+      color: #4a4540;
+      margin-top: 1rem;
+    }
+
+    #app { display: none; }
+
     .feed {
       display: flex;
       flex-direction: column;
@@ -57,25 +89,10 @@
       transition: border-color 0.3s;
     }
 
-    .message.pending {
-      border-color: #3a3530;
-      color: #6b6560;
-    }
-
-    .message.speaking {
-      border-color: #8a7a60;
-      color: #e0ddd5;
-    }
-
-    .message.done {
-      border-color: #2a2a2a;
-      color: #b8b3a7;
-    }
-
-    .message.error {
-      border-color: #5a3030;
-      color: #a05040;
-    }
+    .message.pending { border-color: #3a3530; color: #6b6560; }
+    .message.speaking { border-color: #8a7a60; color: #e0ddd5; }
+    .message.done { border-color: #2a2a2a; color: #b8b3a7; }
+    .message.error { border-color: #5a3030; color: #a05040; }
 
     .message-header {
       display: flex;
@@ -89,8 +106,7 @@
     }
 
     .dot {
-      width: 6px;
-      height: 6px;
+      width: 6px; height: 6px;
       border-radius: 50%;
       background: #3a3530;
     }
@@ -141,55 +157,6 @@
       padding: 3rem 0;
     }
 
-    .manual {
-      margin-top: 1.5rem;
-    }
-
-    .manual summary {
-      font-size: 0.75rem;
-      color: #4a4540;
-      cursor: pointer;
-      margin-bottom: 0.75rem;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 100px;
-      background: #141414;
-      border: 1px solid #2a2a2a;
-      border-radius: 8px;
-      color: #e0ddd5;
-      font-family: inherit;
-      font-size: 0.85rem;
-      line-height: 1.6;
-      padding: 0.75rem;
-      resize: vertical;
-      outline: none;
-    }
-
-    textarea:focus { border-color: #4a4540; }
-    textarea::placeholder { color: #3a3530; }
-
-    button {
-      font-family: inherit;
-      font-size: 0.8rem;
-      letter-spacing: 0.08em;
-      padding: 0.5rem 1.2rem;
-      border-radius: 6px;
-      border: 1px solid #2a2a2a;
-      background: #1a1a1a;
-      color: #b8b3a7;
-      cursor: pointer;
-      margin-top: 0.5rem;
-    }
-
-    button:hover:not(:disabled) {
-      background: #242420;
-      border-color: #4a4540;
-    }
-
-    button:disabled { opacity: 0.3; cursor: not-allowed; }
-
     .status-bar {
       display: flex;
       align-items: center;
@@ -200,8 +167,7 @@
     }
 
     .status-dot {
-      width: 5px;
-      height: 5px;
+      width: 5px; height: 5px;
       border-radius: 50%;
       background: #3a3530;
     }
@@ -212,36 +178,44 @@
 </head>
 <body>
   <h1>Rocky Voice</h1>
-  <p class="subtitle">leave open. Rocky speaks automatic.</p>
+  <p class="subtitle">hear space friend speak</p>
 
   <div class="container">
-    <div class="feed" id="feed">
-      <div class="empty" id="empty">waiting for Rocky words...</div>
+    <div id="startScreen">
+      <button onclick="start()">enable Rocky voice</button>
+      <p>click once. then Rocky speaks automatic.</p>
     </div>
 
-    <details class="manual">
-      <summary>or paste text manually</summary>
-      <textarea id="input" placeholder="Paste Rocky words here. Ctrl+Enter to speak."></textarea>
-      <button id="speakBtn" onclick="manualSpeak()">Speak</button>
-    </details>
-
-    <div class="status-bar disconnected" id="statusBar">
-      <span class="status-dot"></span>
-      <span id="statusText">connecting...</span>
+    <div id="app">
+      <div class="feed" id="feed">
+        <div class="empty" id="empty">waiting for Rocky words...</div>
+      </div>
+      <div class="status-bar disconnected" id="statusBar">
+        <span class="status-dot"></span>
+        <span id="statusText">connecting...</span>
+      </div>
     </div>
   </div>
 
   <script>
-    const feed = document.getElementById("feed");
-    const empty = document.getElementById("empty");
-    const statusBar = document.getElementById("statusBar");
-    const statusText = document.getElementById("statusText");
+    let audioCtx;
     const audioQueue = [];
     let playing = false;
     let messageEls = new Map();
 
+    function start() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+
+      document.getElementById("startScreen").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      connect();
+    }
+
     function connect() {
       const es = new EventSource("/api/events");
+      const statusBar = document.getElementById("statusBar");
+      const statusText = document.getElementById("statusText");
 
       es.onopen = () => {
         statusBar.className = "status-bar connected";
@@ -263,7 +237,8 @@
     }
 
     function addMessage(text, state) {
-      empty.style.display = "none";
+      document.getElementById("empty").style.display = "none";
+      const feed = document.getElementById("feed");
       const el = document.createElement("div");
       el.className = `message ${state}`;
       el.innerHTML = `
@@ -283,7 +258,7 @@
     }
 
     function markError(error) {
-      const last = feed.querySelector(".message.pending:last-of-type");
+      const last = document.querySelector(".message.pending:last-of-type");
       if (last) {
         last.className = "message error";
         last.querySelector(".message-header").innerHTML = `<span class="dot"></span> error: ${escapeHtml(error)}`;
@@ -303,17 +278,16 @@
 
       try {
         const bytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: "audio/mpeg" });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+        const arrayBuffer = bytes.buffer;
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
 
         await new Promise((resolve) => {
-          audio.onended = resolve;
-          audio.onerror = resolve;
-          audio.play();
+          source.onended = resolve;
+          source.start(0);
         });
-
-        URL.revokeObjectURL(url);
       } catch (err) {
         console.error("Playback failed:", err);
       }
@@ -327,39 +301,11 @@
       playNext();
     }
 
-    async function manualSpeak() {
-      const text = document.getElementById("input").value.trim();
-      if (!text) return;
-      const btn = document.getElementById("speakBtn");
-      btn.disabled = true;
-
-      try {
-        await fetch("/api/speak", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-      } catch (err) {
-        markError(err.message);
-      }
-
-      btn.disabled = false;
-    }
-
-    document.getElementById("input").addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && e.ctrlKey) {
-        e.preventDefault();
-        manualSpeak();
-      }
-    });
-
     function escapeHtml(s) {
       const d = document.createElement("div");
       d.textContent = s;
       return d.innerHTML;
     }
-
-    connect();
   </script>
 </body>
 </html>
