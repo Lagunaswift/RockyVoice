@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rocky Voice</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "IBM Plex Mono", "SF Mono", "Consolas", monospace;
+      background: #0a0a0a;
+      color: #e0ddd5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 400;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+      color: #b8b3a7;
+    }
+
+    .subtitle {
+      font-size: 0.8rem;
+      color: #6b6560;
+      margin-bottom: 2rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .feed {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .message {
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 1rem;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      transition: border-color 0.3s;
+    }
+
+    .message.pending {
+      border-color: #3a3530;
+      color: #6b6560;
+    }
+
+    .message.speaking {
+      border-color: #8a7a60;
+      color: #e0ddd5;
+    }
+
+    .message.done {
+      border-color: #2a2a2a;
+      color: #b8b3a7;
+    }
+
+    .message.error {
+      border-color: #5a3030;
+      color: #a05040;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #6b6560;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #3a3530;
+    }
+
+    .pending .dot { background: #8a7a60; animation: pulse 1.5s infinite; }
+    .speaking .dot { background: #a09060; animation: pulse 0.8s infinite; }
+    .done .dot { background: #4a6040; }
+    .error .dot { background: #a05040; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .wave {
+      display: none;
+      gap: 3px;
+      align-items: center;
+      height: 18px;
+      margin-top: 0.75rem;
+    }
+
+    .speaking .wave { display: flex; }
+
+    .wave span {
+      display: block;
+      width: 3px;
+      background: #8a7a60;
+      border-radius: 2px;
+      animation: wave 1s ease-in-out infinite;
+    }
+
+    .wave span:nth-child(1) { height: 8px; animation-delay: 0s; }
+    .wave span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+    .wave span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+    .wave span:nth-child(4) { height: 16px; animation-delay: 0.45s; }
+    .wave span:nth-child(5) { height: 6px; animation-delay: 0.6s; }
+
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.5); }
+      50% { transform: scaleY(1.2); }
+    }
+
+    .empty {
+      text-align: center;
+      color: #3a3530;
+      font-size: 0.85rem;
+      padding: 3rem 0;
+    }
+
+    .manual {
+      margin-top: 1.5rem;
+    }
+
+    .manual summary {
+      font-size: 0.75rem;
+      color: #4a4540;
+      cursor: pointer;
+      margin-bottom: 0.75rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #e0ddd5;
+      font-family: inherit;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+    }
+
+    textarea:focus { border-color: #4a4540; }
+    textarea::placeholder { color: #3a3530; }
+
+    button {
+      font-family: inherit;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      padding: 0.5rem 1.2rem;
+      border-radius: 6px;
+      border: 1px solid #2a2a2a;
+      background: #1a1a1a;
+      color: #b8b3a7;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+
+    button:hover:not(:disabled) {
+      background: #242420;
+      border-color: #4a4540;
+    }
+
+    button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      color: #4a4540;
+      margin-top: 1rem;
+    }
+
+    .status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #3a3530;
+    }
+
+    .status-bar.connected .status-dot { background: #4a6040; }
+    .status-bar.disconnected .status-dot { background: #a05040; }
+  </style>
+</head>
+<body>
+  <h1>Rocky Voice</h1>
+  <p class="subtitle">leave open. Rocky speaks automatic.</p>
+
+  <div class="container">
+    <div class="feed" id="feed">
+      <div class="empty" id="empty">waiting for Rocky words...</div>
+    </div>
+
+    <details class="manual">
+      <summary>or paste text manually</summary>
+      <textarea id="input" placeholder="Paste Rocky words here. Ctrl+Enter to speak."></textarea>
+      <button id="speakBtn" onclick="manualSpeak()">Speak</button>
+    </details>
+
+    <div class="status-bar disconnected" id="statusBar">
+      <span class="status-dot"></span>
+      <span id="statusText">connecting...</span>
+    </div>
+  </div>
+
+  <script>
+    const feed = document.getElementById("feed");
+    const empty = document.getElementById("empty");
+    const statusBar = document.getElementById("statusBar");
+    const statusText = document.getElementById("statusText");
+    const audioQueue = [];
+    let playing = false;
+    let messageEls = new Map();
+
+    function connect() {
+      const es = new EventSource("/api/events");
+
+      es.onopen = () => {
+        statusBar.className = "status-bar connected";
+        statusText.textContent = "listening";
+      };
+
+      es.onerror = () => {
+        statusBar.className = "status-bar disconnected";
+        statusText.textContent = "reconnecting...";
+      };
+
+      es.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === "connected") return;
+        if (data.type === "pending") addMessage(data.text, "pending");
+        if (data.type === "audio") receiveAudio(data.text, data.audio);
+        if (data.type === "error") markError(data.error);
+      };
+    }
+
+    function addMessage(text, state) {
+      empty.style.display = "none";
+      const el = document.createElement("div");
+      el.className = `message ${state}`;
+      el.innerHTML = `
+        <div class="message-header"><span class="dot"></span> ${state === "pending" ? "generating voice..." : "speaking"}</div>
+        <div class="message-text">${escapeHtml(text)}</div>
+        <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+      `;
+      feed.appendChild(el);
+      feed.scrollTop = feed.scrollHeight;
+      messageEls.set(text, el);
+    }
+
+    function receiveAudio(text, audioB64) {
+      const el = messageEls.get(text);
+      audioQueue.push({ text, audioB64, el });
+      playNext();
+    }
+
+    function markError(error) {
+      const last = feed.querySelector(".message.pending:last-of-type");
+      if (last) {
+        last.className = "message error";
+        last.querySelector(".message-header").innerHTML = `<span class="dot"></span> error: ${escapeHtml(error)}`;
+      }
+    }
+
+    async function playNext() {
+      if (playing || audioQueue.length === 0) return;
+      playing = true;
+
+      const { text, audioB64, el } = audioQueue.shift();
+
+      if (el) {
+        el.className = "message speaking";
+        el.querySelector(".message-header").innerHTML = '<span class="dot"></span> speaking';
+      }
+
+      try {
+        const bytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: "audio/mpeg" });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+
+        await new Promise((resolve) => {
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play();
+        });
+
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error("Playback failed:", err);
+      }
+
+      if (el) {
+        el.className = "message done";
+        el.querySelector(".message-header").innerHTML = '<span class="dot"></span> done';
+      }
+
+      playing = false;
+      playNext();
+    }
+
+    async function manualSpeak() {
+      const text = document.getElementById("input").value.trim();
+      if (!text) return;
+      const btn = document.getElementById("speakBtn");
+      btn.disabled = true;
+
+      try {
+        await fetch("/api/speak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+      } catch (err) {
+        markError(err.message);
+      }
+
+      btn.disabled = false;
+    }
+
+    document.getElementById("input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.ctrlKey) {
+        e.preventDefault();
+        manualSpeak();
+      }
+    });
+
+    function escapeHtml(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    connect();
+  </script>
+</body>
+</html>

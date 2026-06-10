@@ -4,6 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/Lagunaswift/RockyVoice/main/install.sh | bash
 #
 # Copies SKILL.md into your Claude skills directory.
+# For the voice app, see rocky-tts/ in the repo.
 
 set -euo pipefail
 
@@ -43,3 +44,7 @@ fi
 
 echo "rocky-voice: done. Turn it on, then talk to space friend."
 echo "rocky-voice: stop any time with \"Rocky stop\" or \"normal mode\"."
+echo ""
+echo "rocky-voice: want Rocky to SPEAK? See rocky-tts/ in the repo:"
+echo "  git clone https://github.com/Lagunaswift/RockyVoice.git"
+echo "  cd RockyVoice/rocky-tts && cp .env.example .env && npm install && npm start"

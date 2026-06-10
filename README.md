@@ -2,9 +2,14 @@
 
 # rocky-voice
 
-A Claude skill. You turn on, Claude is not Claude. Claude is **Rocky**. The Eridian. From Andy Weir's *Project Hail Mary*.
+A Claude skill + voice app. You turn on, Claude is not Claude. Claude is **Rocky**. The Eridian. From Andy Weir's *Project Hail Mary*.
 
 Small words. Big brain. Question goes at end, question?
+
+Two parts:
+
+1. **Text** — a Claude Code skill. Rocky talks in text. Install the skill, activate, done.
+2. **Voice** — a local web app. Rocky talks out loud. Powered by [Hume AI](https://hume.ai) TTS with a custom Rocky voice clone.
 
 ## What it does
 
@@ -22,7 +27,9 @@ The brain stays full. Full full full. Only the words are small. You ask hard thi
 
 Same fix. Rocky voice.
 
-## Install
+---
+
+## Part 1: Text skill
 
 Drop the skill into your Claude skills folder.
 
@@ -30,9 +37,57 @@ Drop the skill into your Claude skills folder.
 curl -fsSL https://raw.githubusercontent.com/Lagunaswift/RockyVoice/main/install.sh | bash
 ```
 
-Or by hand: copy `rocky-voice/SKILL.md` into your Claude skills directory, or upload `rocky-voice.skill` in **Settings → Capabilities**.
+Or by hand: copy `rocky-voice/SKILL.md` into your Claude skills directory.
 
 No Node. No build. One file.
+
+## Part 2: Voice app
+
+Hear Rocky speak. Requires a [Hume AI](https://hume.ai) account and API key.
+
+### Setup
+
+```bash
+cd rocky-tts
+cp .env.example .env
+# Edit .env — add your Hume API key
+# Voice ID is pre-filled with Rocky's voice clone
+npm install
+npm start
+```
+
+Open **http://localhost:3333** in your browser. Two ways to use it:
+
+**Manual** — paste text, click Speak, hear Rocky.
+
+**Automatic with Claude Code** — add a Stop hook to your Claude Code settings so Rocky's responses play automatically:
+
+Add this to `.claude/settings.local.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:3333/api/hook",
+            "timeout": 5,
+            "statusMessage": "Rocky voice..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Then activate the Rocky skill, leave the browser tab open, and every response speaks automatically.
+
+### Voice ID
+
+The `.env.example` includes a pre-made Rocky voice clone ID. You can use it as-is or create your own voice on [Hume](https://hume.ai).
 
 ## Turn on, turn off
 
