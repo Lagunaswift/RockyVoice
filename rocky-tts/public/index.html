@@ -199,9 +199,10 @@
 
   <script>
     let audioCtx;
-    const audioQueue = [];
-    let playing = false;
-    let messageEls = new Map();
+    const messageEls = new Map();   // msgId -> element
+    const playState = new Map();    // msgId -> scheduling state
+    let sampleRate = 48000;         // overwritten by the "connected" event
+    let channels = 1;
 
     function start() {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -229,76 +230,116 @@
 
       es.onmessage = (e) => {
         const data = JSON.parse(e.data);
-        if (data.type === "connected") return;
-        if (data.type === "pending") addMessage(data.text, "pending");
-        if (data.type === "audio") receiveAudio(data.text, data.audio);
-        if (data.type === "error") markError(data.error);
+        if (data.type === "connected") {
+          if (data.sampleRate) sampleRate = data.sampleRate;
+          if (data.channels) channels = data.channels;
+          return;
+        }
+        if (data.type === "pending") addMessage(data.msgId, data.text);
+        if (data.type === "chunk") handleChunk(data.msgId, data.audio);
+        if (data.type === "done") handleDone(data.msgId);
+        if (data.type === "error") markError(data.msgId, data.error);
       };
     }
 
-    function addMessage(text, state) {
+    function setHeader(el, label) {
+      el.querySelector(".message-header").innerHTML =
+        `<span class="dot"></span> ${label}`;
+    }
+
+    function addMessage(msgId, text) {
       document.getElementById("empty").style.display = "none";
       const feed = document.getElementById("feed");
       const el = document.createElement("div");
-      el.className = `message ${state}`;
+      el.className = "message pending";
       el.innerHTML = `
-        <div class="message-header"><span class="dot"></span> ${state === "pending" ? "generating voice..." : "speaking"}</div>
+        <div class="message-header"><span class="dot"></span> generating voice...</div>
         <div class="message-text">${escapeHtml(text)}</div>
         <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
       `;
       feed.appendChild(el);
       feed.scrollTop = feed.scrollHeight;
-      messageEls.set(text, el);
+      messageEls.set(msgId, el);
+      playState.set(msgId, {
+        nextTime: 0,        // running timeline cursor for gapless playback
+        endTime: 0,         // when the last scheduled chunk finishes
+        leftover: new Uint8Array(0), // carry odd trailing byte between chunks
+        gotAudio: false,
+        lastSource: null,
+      });
     }
 
-    function receiveAudio(text, audioB64) {
-      const el = messageEls.get(text);
-      audioQueue.push({ text, audioB64, el });
-      playNext();
-    }
+    // Decode one base64 PCM chunk (16-bit signed LE) and schedule it to play
+    // immediately after whatever is already queued for this message.
+    function handleChunk(msgId, b64) {
+      const st = playState.get(msgId);
+      if (!st || !audioCtx) return;
+      const el = messageEls.get(msgId);
 
-    function markError(error) {
-      const last = document.querySelector(".message.pending:last-of-type");
-      if (last) {
-        last.className = "message error";
-        last.querySelector(".message-header").innerHTML = `<span class="dot"></span> error: ${escapeHtml(error)}`;
-      }
-    }
-
-    async function playNext() {
-      if (playing || audioQueue.length === 0) return;
-      playing = true;
-
-      const { text, audioB64, el } = audioQueue.shift();
-
-      if (el) {
+      if (!st.gotAudio && el) {
         el.className = "message speaking";
-        el.querySelector(".message-header").innerHTML = '<span class="dot"></span> speaking';
+        setHeader(el, "speaking");
+      }
+      st.gotAudio = true;
+
+      const bin = atob(b64);
+      let bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+      if (st.leftover.length) {
+        const merged = new Uint8Array(st.leftover.length + bytes.length);
+        merged.set(st.leftover, 0);
+        merged.set(bytes, st.leftover.length);
+        bytes = merged;
       }
 
-      try {
-        const bytes = Uint8Array.from(atob(audioB64), c => c.charCodeAt(0));
-        const arrayBuffer = bytes.buffer;
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioCtx.destination);
+      // 16-bit samples are 2 bytes; carry any odd trailing byte to next chunk.
+      const usableLen = bytes.length - (bytes.length % 2);
+      st.leftover = bytes.slice(usableLen);
+      if (usableLen === 0) return;
 
-        await new Promise((resolve) => {
-          source.onended = resolve;
-          source.start(0);
-        });
-      } catch (err) {
-        console.error("Playback failed:", err);
+      const numSamples = usableLen / 2;
+      const view = new DataView(bytes.buffer, bytes.byteOffset, usableLen);
+      const audioBuffer = audioCtx.createBuffer(channels, numSamples, sampleRate);
+      const ch = audioBuffer.getChannelData(0);
+      for (let i = 0; i < numSamples; i++) {
+        ch[i] = view.getInt16(i * 2, true) / 32768;
       }
 
+      const src = audioCtx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(audioCtx.destination);
+
+      const now = audioCtx.currentTime;
+      if (st.nextTime < now) st.nextTime = now; // never schedule in the past
+      src.start(st.nextTime);
+      st.nextTime += audioBuffer.duration;
+      st.endTime = st.nextTime;
+      st.lastSource = src;
+    }
+
+    function handleDone(msgId) {
+      const st = playState.get(msgId);
+      const el = messageEls.get(msgId);
+      const finish = () => {
+        if (el) { el.className = "message done"; setHeader(el, "done"); }
+        playState.delete(msgId);
+      };
+      if (!st || !st.gotAudio) { finish(); return; }
+      // If playback already caught up, finish now; otherwise wait for the
+      // final scheduled chunk to end.
+      if (audioCtx.currentTime >= st.endTime - 0.02 || !st.lastSource) finish();
+      else st.lastSource.onended = finish;
+    }
+
+    function markError(msgId, error) {
+      const el = messageEls.get(msgId) ||
+        document.querySelector(".message.pending:last-of-type");
       if (el) {
-        el.className = "message done";
-        el.querySelector(".message-header").innerHTML = '<span class="dot"></span> done';
+        el.className = "message error";
+        setHeader(el, `error: ${escapeHtml(error || "")}`);
       }
-
-      playing = false;
-      playNext();
+      playState.delete(msgId);
     }
 
     function escapeHtml(s) {

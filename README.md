@@ -51,7 +51,8 @@ Hear Rocky speak. Requires a [Hume AI](https://hume.ai) account and API key.
 cd rocky-tts
 cp .env.example .env
 # Edit .env — add your Hume API key
-# Voice ID is pre-filled with Rocky's voice clone
+# Then clone your own Rocky voice (see "Voice setup" below) and add its id.
+# No id yet? It still runs with a stock fallback voice.
 npm install
 npm start
 ```
@@ -97,11 +98,78 @@ Add this to `.claude/settings.local.json`:
 
 The `Stop` hook sends Rocky's words to the voice server after every response. The `SessionStart` hook starts the server automatically when you open Claude Code — no manual `npm start` needed. Change `/path/to/rocky-tts` to wherever you cloned the repo.
 
+**On Windows**, the `SessionStart` `command` above is bash and won't run. Use a PowerShell command instead (and add `"shell": "powershell"` to that hook). This version also skips starting a second server if one is already running:
+
+```json
+{
+  "type": "command",
+  "shell": "powershell",
+  "command": "if (-not (Get-NetTCPConnection -LocalPort 3333 -State Listen -ErrorAction SilentlyContinue)) { Start-Process node -ArgumentList 'server.js' -WorkingDirectory 'C:\\path\\to\\rocky-tts' -WindowStyle Hidden }",
+  "async": true,
+  "statusMessage": "Starting Rocky voice..."
+}
+```
+
 Then activate the Rocky skill, open **http://localhost:3333** in your browser, click "enable Rocky voice" once, and every response speaks automatically.
 
-### Voice ID
+### Voice setup — clone your own Rocky (~1 minute, one time)
 
-The `.env.example` includes a pre-made Rocky voice clone ID. You can use it as-is or create your own voice on [Hume](https://hume.ai).
+Voice clones on Hume are **private to the account that made them** — a shared voice id returns `404` for everyone else. So each person makes their own from the same source audio. Same recording in, same Rocky out.
+
+This repo ships the source clip: [`rocky-tts/rocky-voice-sample.mp3`](rocky-tts/rocky-voice-sample.mp3) (≈45s of Rocky).
+
+1. Sign in at [platform.hume.ai](https://platform.hume.ai).
+2. Go to **Voice Library → Clone Voice** (or **Add Voice → Upload**).
+3. Upload `rocky-tts/rocky-voice-sample.mp3`, name it `Rocky`, and create it.
+4. Open the new voice and copy its **voice id**.
+5. Paste it into `rocky-tts/.env`:
+   ```
+   HUME_VOICE_ID=your-copied-id
+   ```
+6. Restart the app. The console prints `Voice: cloned (...)` when it's using yours.
+
+**No clone yet?** The app still speaks using a stock Hume voice (`HUME_FALLBACK_VOICE` in `.env`, default "Male English Actor") so nothing 404s — it just won't sound like the real Rocky until you clone.
+
+> Heads up: Hume's API can only *save* a voice from a prior generation, not upload an audio file. Cloning from a recording is a Platform (web) action, which is why this step is done in the browser, not by a script.
+
+## Configuration
+
+All runtime settings live in `rocky-tts/.env`. Copy `.env.example` to `.env`, edit, then **restart the server** for changes to take effect (`npm start`, or restart Claude Code if you use the `SessionStart` hook).
+
+| Setting | Default | What it does |
+|---|---|---|
+| `HUME_API_KEY` | — | Your Hume API key. **Required.** Get it at [platform.hume.ai](https://platform.hume.ai). |
+| `HUME_VOICE_ID` | — | Your cloned Rocky voice id (see [Voice setup](#voice-setup--clone-your-own-rocky-1-minute-one-time)). Leave unset to use the fallback. |
+| `HUME_FALLBACK_VOICE` | `Male English Actor` | Stock Hume voice used until you set `HUME_VOICE_ID`. Any voice name from Hume's Voice Library works. |
+| `ROCKY_SPEED` | `1.25` | Speech speed. Higher = faster, lower = slower. See below. |
+| `PORT` | `3333` | Port the server listens on. If you change it, update the hook URLs to match. |
+| `HUME_SECRET_KEY` | — | Not used by the app today. Safe to leave as the placeholder. |
+
+> Your `.env` is gitignored — your keys never get committed. Only `.env.example` (placeholders) is in the repo.
+
+### Speed toggle
+
+Want Rocky faster or slower? Set `ROCKY_SPEED` in `.env`:
+
+```
+ROCKY_SPEED=1.5    # snappy
+ROCKY_SPEED=1.25   # default
+ROCKY_SPEED=0.9    # slow and deliberate
+```
+
+Keep it within **0.75–1.5** for clean audio — values further out can make Hume's output unstable. Restart the server after changing it.
+
+### Using a different fallback voice
+
+Before you clone (or if you just want a different stock voice), set `HUME_FALLBACK_VOICE` to any voice name from Hume's Voice Library, e.g. `HUME_FALLBACK_VOICE=Female English Actor`. Ignored once `HUME_VOICE_ID` is set.
+
+### Deeper tuning (edit `rocky-tts/server.js`)
+
+A few knobs live as constants near the top of `server.js`:
+
+- **`ROCKY_DESCRIPTION`** — the acting directions sent to Hume (`"Alien engineer. Broken English. Deliberate. Warm but strange."`). Tweak Rocky's delivery here; keep it under ~100 characters. Only works on Octave 1 (the version the app uses) — Octave 2 rejects acting directions.
+- **`MAX_UTTERANCE_CHARS`** (`4500`) — long replies are split into pieces under this limit so nothing gets cut off (Hume's hard cap is 5000 chars per utterance).
+- **`MAX_SPEAK_CHARS`** (`6000`) — overall ceiling on how much of a single reply is spoken, so a runaway response can't generate endless audio. Raise it to read even longer replies in full.
 
 ## Turn on, turn off
 
@@ -123,7 +191,7 @@ Keep Rocky away from client work, real documents, anything where exact wording c
 
 ## Credit
 
-Rocky's voice clone was trained using scrubbed audio shared by [ballongmaskin](https://github.com/ballongmaskin), who built an earlier Rocky voice project and generously provided the [training audio](https://pedramamini.com/dropbox/rocky_training_audio_scrubbed.wav).
+Rocky's voice clone was trained using scrubbed audio shared by [ballongmaskin](https://github.com/ballongmaskin), who built an earlier Rocky voice project and generously provided the [training audio](https://pedramamini.com/dropbox/rocky_training_audio_scrubbed.wav). The bundled `rocky-tts/rocky-voice-sample.mp3` is a ~45-second excerpt of that audio, included so you can clone your own voice.
 
 Persistence, safety-clarity, and off-switch ideas borrowed from [caveman](https://github.com/JuliusBrussee/caveman) by Julius Brussee — a token-compression skill built on the same "small mouth, big brain" idea.
 
