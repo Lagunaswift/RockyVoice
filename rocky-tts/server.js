@@ -44,9 +44,6 @@ const sseClients = new Set();
 // stays consistent across replies instead of resetting every message.
 let lastGenerationId = null;
 
-// Track how far we have read in each transcript so we only speak new messages.
-const transcriptOffsets = new Map();
-
 let msgCounter = 0;
 
 app.get("/api/events", (req, res) => {
@@ -242,38 +239,6 @@ app.post("/api/speak", async (req, res) => {
   speakStreaming(text);
 });
 
-// Extract all assistant text blocks from a transcript JSONL file, starting
-// after the byte offset we last read. Returns { texts: string[], newOffset }.
-function extractNewAssistantTexts(filePath, fromOffset) {
-  let data;
-  try {
-    data = fs.readFileSync(filePath, "utf-8");
-  } catch {
-    return { texts: [], newOffset: fromOffset };
-  }
-  const newOffset = Buffer.byteLength(data, "utf-8");
-  if (newOffset <= fromOffset) return { texts: [], newOffset };
-
-  const fresh = Buffer.from(data, "utf-8").slice(fromOffset).toString("utf-8");
-  const texts = [];
-  for (const line of fresh.split("\n")) {
-    if (!line.trim()) continue;
-    let entry;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (entry.type !== "assistant") continue;
-    const content = entry.message?.content;
-    if (!Array.isArray(content)) continue;
-    for (const block of content) {
-      if (block.type === "text" && block.text) texts.push(block.text);
-    }
-  }
-  return { texts, newOffset };
-}
-
 app.post("/api/hook", async (req, res) => {
   const hookData = req.body;
   fs.appendFileSync(
@@ -281,31 +246,6 @@ app.post("/api/hook", async (req, res) => {
     JSON.stringify(hookData) + "\n"
   );
 
-  const transcriptPath = hookData.transcript_path;
-
-  // If we have a transcript, read ALL new assistant messages and speak each one.
-  if (transcriptPath && fs.existsSync(transcriptPath)) {
-    const prevOffset = transcriptOffsets.get(transcriptPath) || 0;
-    const { texts, newOffset } = extractNewAssistantTexts(transcriptPath, prevOffset);
-    transcriptOffsets.set(transcriptPath, newOffset);
-
-    const speakable = texts
-      .map(cleanForSpeech)
-      .filter((t) => t.length > 0);
-
-    if (speakable.length === 0) {
-      res.json({ ok: true, note: "no speakable text in transcript" });
-      return;
-    }
-
-    res.json({ ok: true, count: speakable.length });
-    for (const text of speakable) {
-      await speakStreaming(text);
-    }
-    return;
-  }
-
-  // Fallback: use the single assistant_message field if no transcript available.
   const raw = hookData.assistant_message || hookData.last_assistant_message || null;
   if (!raw) {
     res.json({ ok: true, note: "no text found in hook data" });

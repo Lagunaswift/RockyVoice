@@ -3,282 +3,684 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rocky Voice</title>
+  <title>Eridian Translator</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: "IBM Plex Mono", "SF Mono", "Consolas", monospace;
-      background: #0a0a0a;
-      color: #e0ddd5;
-      min-height: 100vh;
+      font-family: "IBM Plex Mono", monospace;
+      background: #0a0a0c;
+      color: #40e8c8;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        transparent 0px, transparent 1px,
+        rgba(0,0,0,0.06) 1px, rgba(0,0,0,0.06) 2px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .layout {
+      display: flex;
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ---- LEFT: Waveform panel ---- */
+    .wave-side {
+      flex: 6;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #1a2a28;
+      background: #060a09;
+    }
+
+    /* ---- RIGHT: Text panel (40%) ---- */
+    .text-side {
+      flex: 4;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      background: #080c0b;
+    }
+
+    .text-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid #0e1a18;
+      flex-shrink: 0;
+    }
+
+    .text-header .title {
+      font-size: 0.55rem;
+      font-weight: 500;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: #2a7a68;
+    }
+
+    .text-header .count {
+      font-size: 0.45rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #1a3a34;
+    }
+
+    .log-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .log-feed::-webkit-scrollbar { width: 3px; }
+    .log-feed::-webkit-scrollbar-track { background: #080c0b; }
+    .log-feed::-webkit-scrollbar-thumb { background: #1a2a28; }
+
+    .log-entry {
+      font-size: 0.72rem;
+      line-height: 1.5;
+      padding: 6px 8px;
+      border-left: 2px solid #0e1a18;
+      color: #2a6a58;
+      transition: all 0.3s;
+      word-wrap: break-word;
+    }
+
+    .log-entry.pending { border-left-color: #e8a840; color: #a08030; }
+    .log-entry.speaking { border-left-color: #40e8c8; color: #50f0d0; background: rgba(64,232,200,0.03); }
+    .log-entry.done { border-left-color: #1a3a34; color: #2a6a58; }
+    .log-entry.error { border-left-color: #c04040; color: #c04040; }
+
+    .log-entry .ts {
+      font-size: 0.45rem;
+      color: #143028;
+      margin-right: 5px;
+    }
+
+    .log-entry .tag {
+      font-size: 0.4rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 1px 4px;
+      border: 1px solid;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    .log-entry.pending .tag { border-color: #a08030; color: #e8a840; }
+    .log-entry.speaking .tag { border-color: #30a088; color: #40e8c8; }
+    .log-entry.done .tag { border-color: #1a3a34; color: #2a5a4a; }
+    .log-entry.error .tag { border-color: #802020; color: #c04040; }
+
+    .log-empty {
+      text-align: center;
+      color: #122420;
+      font-size: 0.65rem;
+      padding: 2rem 0;
+      letter-spacing: 0.06em;
+    }
+
+    .text-footer {
+      padding: 6px 14px;
+      border-top: 1px solid #0e1a18;
+      font-size: 0.4rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #122420;
+      display: flex;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    /* (wave-side defined above with flex: 6) */
+
+    .wave-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid #0e1a18;
+      flex-shrink: 0;
+    }
+
+    .wave-header .label {
+      font-size: 0.45rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #1a3a34;
+    }
+
+    .wave-header .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.5rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #1a4a40;
+    }
+
+    .wave-header .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #1a2a28;
+      transition: all 0.3s;
+    }
+
+    .wave-header .status.connected .dot { background: #30c8a0; box-shadow: 0 0 6px #30c8a0; }
+    .wave-header .status.disconnected .dot { background: #c04040; }
+    .wave-header .status.speaking .dot { background: #40e8c8; box-shadow: 0 0 10px #40e8c8; animation: pulse 0.5s infinite; }
+    .wave-header .status.generating .dot { background: #e8a840; box-shadow: 0 0 8px #e8a840; animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      padding: 10px;
+      gap: 6px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .canvas-box {
+      flex: 1;
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .canvas-box canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .canvas-label {
+      position: absolute;
+      top: 6px; left: 10px;
+      font-size: 0.4rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #1a3a34;
+      z-index: 2;
+    }
+
+    /* Theme picker */
+    .theme-picker {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .theme-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+      opacity: 0.5;
+    }
+
+    .theme-dot:hover { opacity: 0.8; transform: scale(1.2); }
+    .theme-dot.active { border-color: #fff; opacity: 1; }
+
+    /* Boot screen */
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      background: #0a0a0c;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 2rem;
+      z-index: 50;
     }
 
-    h1 {
-      font-size: 1.4rem;
-      font-weight: 400;
-      letter-spacing: 0.15em;
+    #startScreen .boot-title {
+      font-size: 0.55rem;
+      letter-spacing: 0.5em;
       text-transform: uppercase;
-      margin-bottom: 0.5rem;
-      color: #b8b3a7;
-    }
-
-    .subtitle {
-      font-size: 0.8rem;
-      color: #6b6560;
+      color: #1a3a34;
       margin-bottom: 2rem;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 640px;
-    }
-
-    #startScreen {
-      text-align: center;
-      padding: 4rem 0;
     }
 
     #startScreen button {
       font-family: inherit;
-      font-size: 1.1rem;
-      letter-spacing: 0.1em;
-      padding: 1.2rem 2.5rem;
-      border-radius: 8px;
-      border: 1px solid #8a7a60;
-      background: #1a1a1a;
-      color: #e0ddd5;
+      font-size: 0.8rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      padding: 14px 36px;
+      border: 1px solid #30a088;
+      background: transparent;
+      color: #40e8c8;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     #startScreen button:hover {
-      background: #242420;
-      border-color: #b8a878;
+      background: rgba(64,232,200,0.06);
+      box-shadow: 0 0 24px rgba(64,232,200,0.08);
     }
 
-    #startScreen p {
-      font-size: 0.75rem;
-      color: #4a4540;
-      margin-top: 1rem;
-    }
-
-    #app { display: none; }
-
-    .feed {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      margin-bottom: 2rem;
-      max-height: 60vh;
-      overflow-y: auto;
-    }
-
-    .message {
-      background: #141414;
-      border: 1px solid #2a2a2a;
-      border-radius: 8px;
-      padding: 1rem;
-      font-size: 0.9rem;
-      line-height: 1.6;
-      transition: border-color 0.3s;
-    }
-
-    .message.pending { border-color: #3a3530; color: #6b6560; }
-    .message.speaking { border-color: #8a7a60; color: #e0ddd5; }
-    .message.done { border-color: #2a2a2a; color: #b8b3a7; }
-    .message.error { border-color: #5a3030; color: #a05040; }
-
-    .message-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.5rem;
-      font-size: 0.7rem;
-      text-transform: uppercase;
+    #startScreen .boot-sub {
+      font-size: 0.5rem;
+      color: #122420;
+      margin-top: 1.2rem;
       letter-spacing: 0.1em;
-      color: #6b6560;
     }
-
-    .dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: #3a3530;
-    }
-
-    .pending .dot { background: #8a7a60; animation: pulse 1.5s infinite; }
-    .speaking .dot { background: #a09060; animation: pulse 0.8s infinite; }
-    .done .dot { background: #4a6040; }
-    .error .dot { background: #a05040; }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 1; }
-    }
-
-    .wave {
-      display: none;
-      gap: 3px;
-      align-items: center;
-      height: 18px;
-      margin-top: 0.75rem;
-    }
-
-    .speaking .wave { display: flex; }
-
-    .wave span {
-      display: block;
-      width: 3px;
-      background: #8a7a60;
-      border-radius: 2px;
-      animation: wave 1s ease-in-out infinite;
-    }
-
-    .wave span:nth-child(1) { height: 8px; animation-delay: 0s; }
-    .wave span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
-    .wave span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
-    .wave span:nth-child(4) { height: 16px; animation-delay: 0.45s; }
-    .wave span:nth-child(5) { height: 6px; animation-delay: 0.6s; }
-
-    @keyframes wave {
-      0%, 100% { transform: scaleY(0.5); }
-      50% { transform: scaleY(1.2); }
-    }
-
-    .empty {
-      text-align: center;
-      color: #3a3530;
-      font-size: 0.85rem;
-      padding: 3rem 0;
-    }
-
-    .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.7rem;
-      color: #4a4540;
-      margin-top: 1rem;
-    }
-
-    .status-dot {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      background: #3a3530;
-    }
-
-    .status-bar.connected .status-dot { background: #4a6040; }
-    .status-bar.disconnected .status-dot { background: #a05040; }
   </style>
 </head>
 <body>
-  <h1>Rocky Voice</h1>
-  <p class="subtitle">hear space friend speak</p>
 
-  <div class="container">
-    <div id="startScreen">
-      <button onclick="start()">enable Rocky voice</button>
-      <p>click once. then Rocky speaks automatic.</p>
+  <div id="startScreen">
+    <div class="boot-title">Eridian Translator v2.1</div>
+    <button onclick="start()">Initialize</button>
+    <div class="boot-sub">audio output required</div>
+  </div>
+
+  <div class="layout" id="mainFrame" style="display:none;">
+
+    <!-- LEFT: Waveform (60%) -->
+    <div class="wave-side">
+      <div class="wave-header">
+        <span class="label">Waveform Analysis</span>
+        <div class="theme-picker" id="themePicker"></div>
+        <div class="status disconnected" id="statusBar">
+          <span class="dot"></span>
+          <span id="statusText">offline</span>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <div class="canvas-box">
+          <div class="canvas-label">Time Domain</div>
+          <canvas id="waveCanvas"></canvas>
+        </div>
+        <div class="canvas-box">
+          <div class="canvas-label">Frequency Spectrum</div>
+          <canvas id="specCanvas"></canvas>
+        </div>
+      </div>
     </div>
 
-    <div id="app">
-      <div class="feed" id="feed">
-        <div class="empty" id="empty">waiting for Rocky words...</div>
+    <!-- RIGHT: Translation text (40%) -->
+    <div class="text-side">
+      <div class="text-header">
+        <span class="title">Translation Log</span>
+        <span class="count" id="msgCount">0</span>
       </div>
-      <div class="status-bar disconnected" id="statusBar">
-        <span class="status-dot"></span>
-        <span id="statusText">connecting...</span>
+      <div class="log-feed" id="feed">
+        <div class="log-empty" id="empty">awaiting signal...</div>
+      </div>
+      <div class="text-footer">
+        <span>PCM <span id="infoRate">48000</span>Hz</span>
+        <span id="infoVoice">voice: pending</span>
       </div>
     </div>
+
   </div>
 
   <script>
-    let audioCtx;
-    const messageEls = new Map();   // msgId -> element
-    const playState = new Map();    // msgId -> scheduling state
-    let sampleRate = 48000;         // overwritten by the "connected" event
+    // ---- Themes ----
+    const THEMES = {
+      rainbow:  { label: "Rainbow",  hue: -1,  dot: "linear-gradient(135deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f)" },
+      cyan:     { label: "Cyan",     hue: 175, dot: "#40e8c8" },
+      amber:    { label: "Amber",    hue: 38,  dot: "#e8a840" },
+      green:    { label: "Green",    hue: 120, dot: "#40e860" },
+      purple:   { label: "Purple",   hue: 270, dot: "#a040e8" },
+      red:      { label: "Red",      hue: 0,   dot: "#e84040" },
+    };
+    let currentTheme = localStorage.getItem("rocky-theme") || "rainbow";
+
+    function initThemePicker() {
+      const picker = document.getElementById("themePicker");
+      for (const [key, theme] of Object.entries(THEMES)) {
+        const dot = document.createElement("div");
+        dot.className = "theme-dot" + (key === currentTheme ? " active" : "");
+        dot.style.background = theme.dot;
+        dot.title = theme.label;
+        dot.dataset.theme = key;
+        dot.onclick = () => setTheme(key);
+        picker.appendChild(dot);
+      }
+    }
+
+    function setTheme(name) {
+      currentTheme = name;
+      localStorage.setItem("rocky-theme", name);
+      document.querySelectorAll(".theme-dot").forEach(d => {
+        d.classList.toggle("active", d.dataset.theme === name);
+      });
+    }
+
+    let audioCtx, analyser, waveData, freqData;
+    let waveCanvas, waveCtx, specCanvas, specCtx;
+    let vizRunning = false;
+    let activeSpeakers = 0;
+    let pendingCount = 0;
+    let frameCount = 0;
+
+    const messageEls = new Map();
+    const playState = new Map();
+    let sampleRate = 48000;
     let channels = 1;
+    let totalMessages = 0;
 
     function start() {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
 
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.82;
+      analyser.connect(audioCtx.destination);
+      waveData = new Uint8Array(analyser.fftSize);
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+
+      waveCanvas = document.getElementById("waveCanvas");
+      waveCtx = waveCanvas.getContext("2d");
+      specCanvas = document.getElementById("specCanvas");
+      specCtx = specCanvas.getContext("2d");
+
+      initThemePicker();
       document.getElementById("startScreen").style.display = "none";
-      document.getElementById("app").style.display = "block";
+      document.getElementById("mainFrame").style.display = "flex";
+
+      // Wait for layout to settle, then size canvases
+      requestAnimationFrame(() => {
+        resizeAll();
+        vizRunning = true;
+        draw();
+      });
+
+      // Re-size whenever container changes
+      const ro = new ResizeObserver(() => resizeAll());
+      ro.observe(waveCanvas.parentElement);
+      ro.observe(specCanvas.parentElement);
+
       connect();
     }
 
+    function resizeAll() {
+      const dpr = window.devicePixelRatio || 1;
+      [waveCanvas, specCanvas].forEach(c => {
+        if (!c || !c.parentElement) return;
+        const rect = c.parentElement.getBoundingClientRect();
+        if (rect.width < 1 || rect.height < 1) return;
+        c.width = rect.width * dpr;
+        c.height = rect.height * dpr;
+      });
+    }
+
+    function draw() {
+      if (!vizRunning) return;
+      requestAnimationFrame(draw);
+      frameCount++;
+      drawWaveform();
+      drawSpectrum();
+    }
+
+    function rainbow(pos) {
+      const t = THEMES[currentTheme];
+      if (!t || t.hue === -1) {
+        const hue = (pos * 300) % 360;
+        return `hsl(${hue}, 100%, 55%)`;
+      }
+      const hue = (t.hue + pos * 40 - 20) % 360;
+      return `hsl(${hue}, 100%, 55%)`;
+    }
+
+    function rainbowAlpha(pos, a) {
+      const t = THEMES[currentTheme];
+      if (!t || t.hue === -1) {
+        const hue = (pos * 300) % 360;
+        return `hsla(${hue}, 100%, 55%, ${a})`;
+      }
+      const hue = (t.hue + pos * 40 - 20) % 360;
+      return `hsla(${hue}, 100%, 55%, ${a})`;
+    }
+
+    function drawGrid(ctx, w, h, vertical) {
+      ctx.strokeStyle = "rgba(30, 60, 52, 0.15)";
+      ctx.lineWidth = 0.5;
+      if (vertical) {
+        for (let i = 1; i < 12; i++) {
+          const y = (h / 12) * i;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+        for (let i = 1; i < 6; i++) {
+          const x = (w / 6) * i;
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        ctx.strokeStyle = "rgba(30, 60, 52, 0.3)";
+        ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
+      } else {
+        for (let i = 1; i < 8; i++) {
+          const y = (h / 8) * i;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+        for (let i = 1; i < 16; i++) {
+          const x = (w / 16) * i;
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+      }
+    }
+
+    // Oscilloscope: vertical. Waveform deflects left/right. Rainbow gradient.
+    function drawWaveform() {
+      const w = waveCanvas.width, h = waveCanvas.height;
+      waveCtx.fillStyle = "#060a09";
+      waveCtx.fillRect(0, 0, w, h);
+      drawGrid(waveCtx, w, h, true);
+
+      analyser.getByteTimeDomainData(waveData);
+      const active = activeSpeakers > 0;
+      const generating = pendingCount > 0 && !active;
+
+      // Build 200 points (not per-pixel, keeps it fast and visible)
+      const numPts = 200;
+      const points = [];
+      for (let p = 0; p < numPts; p++) {
+        const yPos = (p / numPts) * h;
+        const i = Math.floor((p / numPts) * waveData.length);
+        let v;
+        if (active) {
+          v = (waveData[i] / 128.0) - 1.0;
+        } else if (generating) {
+          const t = frameCount * 0.03;
+          v = Math.sin(t + p * 0.06) * 0.22
+            + Math.sin(t * 1.6 + p * 0.15) * 0.12
+            + Math.sin(t * 2.3 + p * 0.25) * 0.06;
+        } else {
+          const t = frameCount * 0.012;
+          v = Math.sin(t + p * 0.04) * 0.08
+            + Math.sin(t * 0.7 + p * 0.09) * 0.05
+            + Math.sin(t * 1.3 + p * 0.02) * 0.03;
+        }
+        points.push({ x: (w / 2) + v * (w * 0.42), y: yPos });
+      }
+
+      // Draw rainbow segments in chunks of ~5 points for smooth color bands
+      const chunkSize = 3;
+      const lineW = active ? 3 : generating ? 2.5 : 1.5;
+
+      for (let c = 0; c < numPts - 1; c += chunkSize) {
+        const end = Math.min(c + chunkSize + 1, numPts);
+        const pos = c / numPts;
+        const intensity = active ? 1.0 : generating ? 0.7 : 0.35;
+
+        // Ghost glow
+        waveCtx.strokeStyle = rainbowAlpha(pos, active ? 0.12 : generating ? 0.1 : 0.06);
+        waveCtx.lineWidth = lineW + (active ? 10 : generating ? 8 : 6);
+        waveCtx.beginPath();
+        waveCtx.moveTo(points[c].x, points[c].y);
+        for (let j = c + 1; j < end; j++) waveCtx.lineTo(points[j].x, points[j].y);
+        waveCtx.stroke();
+
+        // Main line
+        waveCtx.strokeStyle = rainbowAlpha(pos, intensity);
+        waveCtx.shadowColor = rainbow(pos);
+        waveCtx.shadowBlur = active ? 16 : generating ? 8 : 4;
+        waveCtx.lineWidth = lineW;
+        waveCtx.beginPath();
+        waveCtx.moveTo(points[c].x, points[c].y);
+        for (let j = c + 1; j < end; j++) waveCtx.lineTo(points[j].x, points[j].y);
+        waveCtx.stroke();
+      }
+      waveCtx.shadowBlur = 0;
+    }
+
+    // Spectrograph: vertical. 64 thick bars. Rainbow colored by frequency.
+    function drawSpectrum() {
+      const w = specCanvas.width, h = specCanvas.height;
+      specCtx.fillStyle = "#060a09";
+      specCtx.fillRect(0, 0, w, h);
+      drawGrid(specCtx, w, h, true);
+
+      analyser.getByteFrequencyData(freqData);
+      const active = activeSpeakers > 0;
+      const generating = pendingCount > 0 && !active;
+
+      // Group 1024 bins into 64 visible bars
+      const numBars = 64;
+      const binsPerBar = Math.floor(freqData.length / numBars);
+      const barH = h / numBars;
+      const gap = 2;
+
+      for (let b = 0; b < numBars; b++) {
+        let sum = 0;
+        const start = b * binsPerBar;
+        for (let j = start; j < start + binsPerBar; j++) sum += freqData[j];
+        let val;
+        if (active) {
+          val = (sum / binsPerBar) / 255;
+        } else if (generating) {
+          const t = frameCount * 0.025;
+          val = (Math.sin(t + b * 0.18) * 0.5 + 0.5)
+              * (Math.cos(t * 0.6 + b * 0.09) * 0.3 + 0.4) * 0.35;
+        } else {
+          const t = frameCount * 0.015;
+          val = (Math.sin(t + b * 0.12) * 0.5 + 0.5)
+              * (Math.cos(t * 0.5 + b * 0.06) * 0.3 + 0.35) * 0.18;
+        }
+
+        if (val < 0.005) continue;
+
+        const pos = b / numBars;
+        const barW = val * w * 0.88;
+        const y = b * barH;
+        const intensity = active ? 0.4 + val * 0.6 : 0.2 + val * 0.4;
+
+        // Glow behind bar
+        specCtx.shadowColor = rainbow(pos);
+        specCtx.shadowBlur = active ? 10 : 4;
+
+        // Filled bar
+        specCtx.fillStyle = rainbowAlpha(pos, intensity * 0.5);
+        specCtx.fillRect(0, y + gap / 2, barW, barH - gap);
+
+        // Bright tip
+        specCtx.fillStyle = rainbowAlpha(pos, intensity);
+        specCtx.fillRect(barW - 4, y + gap / 2, 5, barH - gap);
+
+        specCtx.shadowBlur = 0;
+      }
+    }
+
+    // ---- Connection ----
+
     function connect() {
       const es = new EventSource("/api/events");
-      const statusBar = document.getElementById("statusBar");
-      const statusText = document.getElementById("statusText");
-
-      es.onopen = () => {
-        statusBar.className = "status-bar connected";
-        statusText.textContent = "listening";
-      };
-
-      es.onerror = () => {
-        statusBar.className = "status-bar disconnected";
-        statusText.textContent = "reconnecting...";
-      };
-
+      es.onopen = () => { setStatus("connected", "listening"); };
+      es.onerror = () => { setStatus("disconnected", "reconnecting"); };
       es.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.type === "connected") {
-          if (data.sampleRate) sampleRate = data.sampleRate;
-          if (data.channels) channels = data.channels;
+        const d = JSON.parse(e.data);
+        if (d.type === "connected") {
+          if (d.sampleRate) { sampleRate = d.sampleRate; document.getElementById("infoRate").textContent = sampleRate; }
+          if (d.channels) channels = d.channels;
+          document.getElementById("infoVoice").textContent = "voice: ready";
           return;
         }
-        if (data.type === "pending") addMessage(data.msgId, data.text);
-        if (data.type === "chunk") handleChunk(data.msgId, data.audio);
-        if (data.type === "done") handleDone(data.msgId);
-        if (data.type === "error") markError(data.msgId, data.error);
+        if (d.type === "pending") addMessage(d.msgId, d.text);
+        if (d.type === "chunk") handleChunk(d.msgId, d.audio);
+        if (d.type === "done") handleDone(d.msgId);
+        if (d.type === "error") markError(d.msgId, d.error);
       };
     }
 
-    function setHeader(el, label) {
-      el.querySelector(".message-header").innerHTML =
-        `<span class="dot"></span> ${label}`;
+    function setStatus(cls, text) {
+      document.getElementById("statusBar").className = "status " + cls;
+      document.getElementById("statusText").textContent = text;
     }
+
+    function updateStatus() {
+      if (activeSpeakers > 0) setStatus("speaking", "translating");
+      else if (pendingCount > 0) setStatus("generating", "generating");
+      else setStatus("connected", "listening");
+    }
+
+    // ---- Messages ----
+
+    function ts() { return new Date().toTimeString().slice(0, 8); }
 
     function addMessage(msgId, text) {
       document.getElementById("empty").style.display = "none";
+      totalMessages++;
+      pendingCount++;
+      document.getElementById("msgCount").textContent = totalMessages;
+      updateStatus();
+
       const feed = document.getElementById("feed");
       const el = document.createElement("div");
-      el.className = "message pending";
-      el.innerHTML = `
-        <div class="message-header"><span class="dot"></span> generating voice...</div>
-        <div class="message-text">${escapeHtml(text)}</div>
-        <div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
-      `;
+      el.className = "log-entry pending";
+      el.innerHTML = `<span class="ts">${ts()}</span><span class="tag">gen</span>${escapeHtml(text)}`;
       feed.appendChild(el);
       feed.scrollTop = feed.scrollHeight;
       messageEls.set(msgId, el);
       playState.set(msgId, {
-        nextTime: 0,        // running timeline cursor for gapless playback
-        endTime: 0,         // when the last scheduled chunk finishes
-        leftover: new Uint8Array(0), // carry odd trailing byte between chunks
-        gotAudio: false,
-        lastSource: null,
+        nextTime: 0, endTime: 0,
+        leftover: new Uint8Array(0),
+        gotAudio: false, lastSource: null,
       });
     }
 
-    // Decode one base64 PCM chunk (16-bit signed LE) and schedule it to play
-    // immediately after whatever is already queued for this message.
+    function setEntry(msgId, state) {
+      const el = messageEls.get(msgId);
+      if (!el) return;
+      el.className = "log-entry " + state;
+      const tag = el.querySelector(".tag");
+      if (tag) tag.textContent = { pending:"gen", speaking:"live", done:"done", error:"err" }[state] || state;
+    }
+
     function handleChunk(msgId, b64) {
       const st = playState.get(msgId);
       if (!st || !audioCtx) return;
-      const el = messageEls.get(msgId);
 
-      if (!st.gotAudio && el) {
-        el.className = "message speaking";
-        setHeader(el, "speaking");
+      if (!st.gotAudio) {
+        pendingCount = Math.max(0, pendingCount - 1);
+        activeSpeakers++;
+        setEntry(msgId, "speaking");
+        updateStatus();
       }
       st.gotAudio = true;
 
@@ -293,7 +695,6 @@
         bytes = merged;
       }
 
-      // 16-bit samples are 2 bytes; carry any odd trailing byte to next chunk.
       const usableLen = bytes.length - (bytes.length % 2);
       st.leftover = bytes.slice(usableLen);
       if (usableLen === 0) return;
@@ -302,16 +703,14 @@
       const view = new DataView(bytes.buffer, bytes.byteOffset, usableLen);
       const audioBuffer = audioCtx.createBuffer(channels, numSamples, sampleRate);
       const ch = audioBuffer.getChannelData(0);
-      for (let i = 0; i < numSamples; i++) {
-        ch[i] = view.getInt16(i * 2, true) / 32768;
-      }
+      for (let i = 0; i < numSamples; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
 
       const src = audioCtx.createBufferSource();
       src.buffer = audioBuffer;
-      src.connect(audioCtx.destination);
+      src.connect(analyser);
 
       const now = audioCtx.currentTime;
-      if (st.nextTime < now) st.nextTime = now; // never schedule in the past
+      if (st.nextTime < now) st.nextTime = now;
       src.start(st.nextTime);
       st.nextTime += audioBuffer.duration;
       st.endTime = st.nextTime;
@@ -320,33 +719,28 @@
 
     function handleDone(msgId) {
       const st = playState.get(msgId);
-      const el = messageEls.get(msgId);
       const finish = () => {
-        if (el) { el.className = "message done"; setHeader(el, "done"); }
+        setEntry(msgId, "done");
+        if (st && st.gotAudio) activeSpeakers = Math.max(0, activeSpeakers - 1);
+        else pendingCount = Math.max(0, pendingCount - 1);
+        updateStatus();
         playState.delete(msgId);
       };
       if (!st || !st.gotAudio) { finish(); return; }
-      // If playback already caught up, finish now; otherwise wait for the
-      // final scheduled chunk to end.
       if (audioCtx.currentTime >= st.endTime - 0.02 || !st.lastSource) finish();
       else st.lastSource.onended = finish;
     }
 
-    function markError(msgId, error) {
-      const el = messageEls.get(msgId) ||
-        document.querySelector(".message.pending:last-of-type");
-      if (el) {
-        el.className = "message error";
-        setHeader(el, `error: ${escapeHtml(error || "")}`);
-      }
+    function markError(msgId) {
+      const el = messageEls.get(msgId);
+      if (el) { el.className = "log-entry error"; const t = el.querySelector(".tag"); if (t) t.textContent = "err"; }
+      const st = playState.get(msgId);
+      if (st) { if (st.gotAudio) activeSpeakers = Math.max(0, activeSpeakers - 1); else pendingCount = Math.max(0, pendingCount - 1); }
+      updateStatus();
       playState.delete(msgId);
     }
 
-    function escapeHtml(s) {
-      const d = document.createElement("div");
-      d.textContent = s;
-      return d.innerHTML;
-    }
+    function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
   </script>
 </body>
 </html>
