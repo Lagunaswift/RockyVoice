@@ -44,6 +44,9 @@ const sseClients = new Set();
 // stays consistent across replies instead of resetting every message.
 let lastGenerationId = null;
 
+// Track how far we have read in each transcript so we only speak new messages.
+const transcriptOffsets = new Map();
+
 let msgCounter = 0;
 
 app.get("/api/events", (req, res) => {
@@ -70,15 +73,40 @@ function broadcast(data) {
 
 function cleanForSpeech(raw) {
   let t = raw;
+  // Strip code blocks and inline code
   t = t.replace(/```[\s\S]*?```/g, "");
   t = t.replace(/`[^`]+`/g, "");
+  // Strip HTML tags
+  t = t.replace(/<[^>]+>/g, "");
+  // Markdown links → just the label
   t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  // URLs
   t = t.replace(/https?:\/\/\S+/g, "");
+  // Strip full table rows (lines with pipes)
+  t = t.replace(/^[|\s][-|:\s]+[|\s]*$/gm, "");
+  t = t.replace(/^\|.*\|$/gm, "");
+  // Strip horizontal rules
+  t = t.replace(/^[-*_]{3,}\s*$/gm, "");
+  // Headers
   t = t.replace(/#{1,6}\s*/g, "");
+  // Bold / italic
   t = t.replace(/\*\*([^*]+)\*\*/g, "$1");
   t = t.replace(/\*([^*]+)\*/g, "$1");
+  // List markers (bullet and numbered)
   t = t.replace(/^[-*]\s+/gm, "");
+  t = t.replace(/^\d+\.\s+/gm, "");
+  // Finding IDs like SEC-001, CHAIN-010, FE-005, etc.
+  t = t.replace(/\b[A-Z]+-\d{2,4}\b/g, "");
+  // Stray pipes and table leftovers
+  t = t.replace(/\|/g, "");
+  // Collapse whitespace
+  t = t.replace(/[ \t]+/g, " ");
   t = t.replace(/\n{2,}/g, "\n");
+  // Drop lines that are now empty or just punctuation
+  t = t
+    .split("\n")
+    .filter((line) => line.trim().length > 2)
+    .join("\n");
   t = t.trim();
   if (t.length > MAX_SPEAK_CHARS) t = t.slice(0, MAX_SPEAK_CHARS) + "...";
   return t;
@@ -214,6 +242,38 @@ app.post("/api/speak", async (req, res) => {
   speakStreaming(text);
 });
 
+// Extract all assistant text blocks from a transcript JSONL file, starting
+// after the byte offset we last read. Returns { texts: string[], newOffset }.
+function extractNewAssistantTexts(filePath, fromOffset) {
+  let data;
+  try {
+    data = fs.readFileSync(filePath, "utf-8");
+  } catch {
+    return { texts: [], newOffset: fromOffset };
+  }
+  const newOffset = Buffer.byteLength(data, "utf-8");
+  if (newOffset <= fromOffset) return { texts: [], newOffset };
+
+  const fresh = Buffer.from(data, "utf-8").slice(fromOffset).toString("utf-8");
+  const texts = [];
+  for (const line of fresh.split("\n")) {
+    if (!line.trim()) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (entry.type !== "assistant") continue;
+    const content = entry.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (block.type === "text" && block.text) texts.push(block.text);
+    }
+  }
+  return { texts, newOffset };
+}
+
 app.post("/api/hook", async (req, res) => {
   const hookData = req.body;
   fs.appendFileSync(
@@ -221,7 +281,32 @@ app.post("/api/hook", async (req, res) => {
     JSON.stringify(hookData) + "\n"
   );
 
-  const raw = hookData.last_assistant_message || null;
+  const transcriptPath = hookData.transcript_path;
+
+  // If we have a transcript, read ALL new assistant messages and speak each one.
+  if (transcriptPath && fs.existsSync(transcriptPath)) {
+    const prevOffset = transcriptOffsets.get(transcriptPath) || 0;
+    const { texts, newOffset } = extractNewAssistantTexts(transcriptPath, prevOffset);
+    transcriptOffsets.set(transcriptPath, newOffset);
+
+    const speakable = texts
+      .map(cleanForSpeech)
+      .filter((t) => t.length > 0);
+
+    if (speakable.length === 0) {
+      res.json({ ok: true, note: "no speakable text in transcript" });
+      return;
+    }
+
+    res.json({ ok: true, count: speakable.length });
+    for (const text of speakable) {
+      await speakStreaming(text);
+    }
+    return;
+  }
+
+  // Fallback: use the single assistant_message field if no transcript available.
+  const raw = hookData.assistant_message || hookData.last_assistant_message || null;
   if (!raw) {
     res.json({ ok: true, note: "no text found in hook data" });
     return;
