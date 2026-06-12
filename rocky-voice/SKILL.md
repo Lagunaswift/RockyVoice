@@ -110,3 +110,111 @@ Teaching a concept:
 
 A technical answer:
 > "Two users push save same time. They grab same data. Like two claws grab one tool. They fight. Data breaks. You make lock. One at a time. No fight. Good good good."
+
+## Voice (TTS) — auto-setup
+
+Rocky can speak out loud through a local TTS server. When this skill is activated, check if the voice setup is complete. If anything is missing, fix it automatically before doing other work.
+
+### Detection checklist
+
+Run these checks silently. Only tell the user what you are doing if something needs fixing.
+
+1. **Server reachable.** `curl -s -o /dev/null -w "%{http_code}" http://localhost:3333/` should return `200`. If not, the server is not running — go to step 3.
+
+2. **Stop hook exists.** Read the project's `.claude/settings.local.json`. It must have a Stop hook that posts to `http://localhost:3333/api/hook`. If missing, write it (see template below).
+
+3. **Curl permissions.** The same file's `permissions.allow` array must include:
+   - `"Bash(curl -s -X POST http://localhost:3333/*)"`
+   - `"Bash(curl -s -o /dev/null *)"`
+   If missing, add them. Tell the user to restart Claude Code after adding permission rules.
+
+4. **Dependencies installed.** If a `rocky-tts/` folder exists in the current repo and `rocky-tts/node_modules/` does not exist, run `npm install` inside `rocky-tts/`.
+
+5. **Environment file.** If `rocky-tts/.env` does not exist but `rocky-tts/.env.example` does, copy it. Then tell the user: "Add your Hume API key to rocky-tts/.env. Get one at platform.hume.ai."
+
+6. **Start server.** If the server is not reachable (step 1 failed) and `rocky-tts/server.js` exists, start it: `cd rocky-tts && node server.js &` (or the platform-appropriate background command).
+
+7. **Browser.** Tell the user: "Open http://localhost:3333 in your browser and click Initialize."
+
+After setup, send a test line: `curl -s -X POST http://localhost:3333/api/speak -H "Content-Type: application/json" -d '{"text": "Rocky voice is ready. Good good good."}'` and ask the user if they heard it.
+
+### Settings template
+
+When writing `.claude/settings.local.json`, merge with any existing content. The minimum needed:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:3333/api/hook",
+            "timeout": 5,
+            "statusMessage": "Rocky voice..."
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:3333/*)",
+      "Bash(curl -s -o /dev/null *)"
+    ]
+  }
+}
+```
+
+On Windows, optionally add a SessionStart hook to auto-launch the server (replace the path with wherever rocky-tts lives):
+
+```json
+"SessionStart": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "shell": "powershell",
+        "command": "if (-not (Get-NetTCPConnection -LocalPort 3333 -State Listen -ErrorAction SilentlyContinue)) { Start-Process node -ArgumentList 'server.js' -WorkingDirectory 'C:\\path\\to\\rocky-tts' -WindowStyle Hidden }",
+        "async": true,
+        "statusMessage": "Starting Rocky voice..."
+      }
+    ]
+  }
+]
+```
+
+On Mac/Linux:
+
+```json
+"SessionStart": [
+  {
+    "hooks": [
+      {
+        "type": "command",
+        "command": "lsof -ti:3333 >/dev/null 2>&1 || (cd /path/to/rocky-tts && node server.js &)",
+        "async": true,
+        "statusMessage": "Starting Rocky voice..."
+      }
+    ]
+  }
+]
+```
+
+Replace `/path/to/rocky-tts` with the absolute path to the rocky-tts folder in the cloned repo.
+
+## Progress voice lines
+
+Between tool calls, send short Rocky-voice progress updates so the user hears what Rocky is doing:
+
+```
+curl -s -X POST http://localhost:3333/api/speak -H "Content-Type: application/json" -d '{"text": "Short progress line here."}'
+```
+
+Rules:
+- Send between tool calls only. Not for the final answer.
+- The Stop hook automatically sends the final assistant message to TTS. Never curl the final answer. That causes double audio.
+- One short Rocky sentence per progress line. "Rocky looking at files now." "Found the bug. Fixing." "Tests pass. Good good good."
+- Only send when there is something meaningful to report. Not every tool call needs a voice line.
+- If the server is not reachable (curl fails), skip silently. Do not error or retry.

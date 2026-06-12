@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- TTS auto-setup in SKILL.md — Claude detects missing hooks, permissions, dependencies, and server state on activation and configures everything automatically
+- Progress voice lines — Rocky speaks short updates between tool calls via curl, instructions built into the skill
+- `.claude/settings.local.json.example` — template with hooks and permissions for manual setup
+- Root `.gitignore` to keep user settings out of git
 - Volume slider with persistent setting across refreshes
 - Stop button to kill audio mid-playback
 - HUME_API_KEY validation at startup with clear warning if missing

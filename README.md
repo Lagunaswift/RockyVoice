@@ -136,12 +136,14 @@ If you already have a `permissions.allow` array (e.g. from the hook setup above)
 1. Clone the repo: `git clone https://github.com/Lagunaswift/RockyVoice.git`
 2. `cd RockyVoice/rocky-tts && cp .env.example .env`
 3. Edit `.env` — add your Hume API key (and optionally clone a Rocky voice, see below)
-4. `npm install && npm start`
-5. Open **http://localhost:3333** and click **Initialize**
-6. Install the Rocky skill: copy `rocky-voice/SKILL.md` into `~/.claude/skills/rocky-voice/`
-7. Add the Stop hook to `.claude/settings.local.json` (see hook setup above)
-8. Optional: add the curl permission rules above for live progress voice lines
-9. Restart Claude Code, activate the Rocky skill, and talk to space friend
+4. `npm install`
+5. Install the Rocky skill: copy `rocky-voice/SKILL.md` into `~/.claude/skills/rocky-voice/`
+6. Open the RockyVoice folder in Claude Code and activate the Rocky skill
+7. **Rocky auto-configures the rest.** The skill detects missing hooks, permissions, and server state — then sets them up. You just need to open **http://localhost:3333** and click **Initialize** when Rocky tells you to.
+
+A settings template is included at `.claude/settings.local.json.example` if you prefer to configure manually.
+
+> **How auto-setup works:** The skill file contains a setup checklist that Claude runs on activation. It writes the Stop hook (sends responses to TTS), adds curl permissions (for progress voice lines), installs dependencies if needed, starts the server, and verifies the connection. The only manual steps are adding your Hume API key and clicking Initialize in the browser.
 
 ### Voice setup — clone your own Rocky (~1 minute, one time)
 

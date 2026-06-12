@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:3333/api/hook",
+            "timeout": 5,
+            "statusMessage": "Rocky voice..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "if (-not (Get-NetTCPConnection -LocalPort 3333 -State Listen -ErrorAction SilentlyContinue)) { Start-Process node -ArgumentList 'server.js' -WorkingDirectory 'C:\\path\\to\\rocky-tts' -WindowStyle Hidden }",
+            "async": true,
+            "statusMessage": "Starting Rocky voice..."
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:3333/*)",
+      "Bash(curl -s -o /dev/null *)"
+    ]
+  }
+}
