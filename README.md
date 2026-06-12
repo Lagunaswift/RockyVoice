@@ -4,14 +4,14 @@
 
 # rocky-voice
 
-A Claude skill + voice app. You turn on, Claude is not Claude. Claude is **Rocky**. The Eridian. From Andy Weir's *Project Hail Mary*.
+A Claude Code / Hermes skill + voice app. You turn on, assistant is not normal assistant. Assistant is **Rocky**. The Eridian. From Andy Weir's *Project Hail Mary*.
 
 Small words. Big brain. Question goes at end, question?
 
 Two parts:
 
-1. **Text** — a Claude Code skill. Rocky talks in text. Install the skill, activate, done.
-2. **Voice** — a local web app. Rocky talks out loud. Powered by [Hume AI](https://hume.ai) TTS with a custom Rocky voice clone.
+1. **Text** — Claude Code and Hermes skills. Rocky talks in text. Install the skill, activate, done.
+2. **Voice** — a local web app plus Hermes command-provider wrapper. Rocky talks out loud. Powered by [Hume AI](https://hume.ai) TTS with a custom Rocky voice clone.
 
 ## What it does
 
@@ -33,6 +33,8 @@ Same fix. Rocky voice.
 
 ## Part 1: Text skill
 
+### Claude Code
+
 Drop the skill into your Claude skills folder.
 
 ```bash
@@ -41,7 +43,17 @@ curl -fsSL https://raw.githubusercontent.com/Lagunaswift/RockyVoice/main/install
 
 Or by hand: copy `rocky-voice/SKILL.md` into your Claude skills directory.
 
-No Node. No build. One file.
+### Hermes
+
+Install the Hermes-native skill into your Hermes skills folder.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Lagunaswift/RockyVoice/main/install.sh | bash -s -- --hermes
+```
+
+Or by hand: copy `hermes/rocky-voice/SKILL.md` into `~/.hermes/skills/creative/rocky-voice/SKILL.md`.
+
+No Node needed for text-only mode. One file.
 
 ## Part 2: Voice app
 
@@ -114,6 +126,38 @@ The `Stop` hook sends Rocky's words to the voice server after every response. Th
 
 Then activate the Rocky skill, open **http://localhost:3333** in your browser, click **Initialize** once, and every response speaks automatically.
 
+### Hermes TTS command provider
+
+Hermes does not use Claude hooks. It can call RockyVoice as a local TTS command provider. Start the RockyVoice server first:
+
+```bash
+cd rocky-tts
+npm install
+npm start
+```
+
+Then add a provider to your Hermes config. Change `/path/to/RockyVoice` to your clone path:
+
+```yaml
+tts:
+  provider: rocky
+  providers:
+    rocky:
+      type: command
+      command: "node /path/to/RockyVoice/rocky-tts/hermes-tts.js --text-file {input_path} --output {output_path}"
+      output_format: wav
+      timeout: 120
+      voice_compatible: true
+```
+
+The wrapper calls `http://127.0.0.1:3333/api/tts` and writes a WAV file for Hermes. If your server runs somewhere else, set `ROCKY_TTS_URL`, for example:
+
+```bash
+ROCKY_TTS_URL=http://127.0.0.1:3333 node rocky-tts/hermes-tts.js --text-file input.txt --output output.wav
+```
+
+For Hermes text style, install the Hermes skill from `hermes/rocky-voice/SKILL.md` and activate it in Hermes. For spoken output, configure the TTS provider above.
+
 ### Optional: allow Rocky's live progress voice lines
 
 Rocky can narrate what he's doing between tool calls (short spoken updates like "Rocky looking at files now"). These are sent via `curl` to the local TTS server. To avoid a permission prompt on every line, add this to your `.claude/settings.local.json` permissions:
@@ -175,7 +219,8 @@ All runtime settings live in `rocky-tts/.env`. Copy `.env.example` to `.env`, ed
 | `HUME_VOICE_ID` | — | Your cloned Rocky voice id (see [Voice setup](#voice-setup--clone-your-own-rocky-1-minute-one-time)). Leave unset to use the fallback. |
 | `HUME_FALLBACK_VOICE` | `Male English Actor` | Stock Hume voice used until you set `HUME_VOICE_ID`. Any voice name from Hume's Voice Library works. |
 | `ROCKY_SPEED` | `1.25` | Speech speed. Higher = faster, lower = slower. See below. |
-| `PORT` | `3333` | Port the server listens on. If you change it, update the hook URLs to match. |
+| `HOST` | `127.0.0.1` | Address the server binds to. Default keeps the API private to your machine. |
+| `PORT` | `3333` | Port the server listens on. If you change it, update the hook URLs and `ROCKY_TTS_URL` to match. |
 | `HUME_SECRET_KEY` | — | Not used by the app today. Safe to leave as the placeholder. |
 
 > Your `.env` is gitignored — your keys never get committed. Only `.env.example` (placeholders) is in the repo.

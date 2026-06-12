@@ -285,8 +285,9 @@ app.post("/api/hook", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3333;
-app.listen(PORT, () => {
-  console.log(`Rocky TTS running at http://localhost:${PORT}`);
+const HOST = process.env.HOST || "127.0.0.1";
+app.listen(PORT, HOST, () => {
+  console.log(`Rocky TTS running at http://${HOST}:${PORT}`);
   if (!process.env.HUME_API_KEY || process.env.HUME_API_KEY === "your-hume-api-key-here") {
     console.warn(
       `\n⚠  HUME_API_KEY is missing or still the placeholder.\n` +
@@ -295,7 +296,7 @@ app.listen(PORT, () => {
     );
   }
   if (configuredVoiceId()) {
-    console.log(`Voice: cloned (HUME_VOICE_ID=${configuredVoiceId()})`);
+    console.log("Voice: cloned (HUME_VOICE_ID set)");
   } else {
     console.log(
       `Voice: stock "${FALLBACK_VOICE_NAME}" — no clone set.\n` +
