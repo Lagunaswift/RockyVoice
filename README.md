@@ -1,3 +1,5 @@
+<p align="center"><img width="700" height="500" alt="Image" src="https://github.com/user-attachments/assets/6cf084cc-8c53-435e-9cfe-65b63389fd8f" />
+
 <p align="center"><strong>talk to space friend now</strong></p>
 
 # rocky-voice
