@@ -288,6 +288,10 @@ const PORT = process.env.PORT || 3333;
 const HOST = process.env.HOST || "127.0.0.1";
 app.listen(PORT, HOST, () => {
   console.log(`Rocky TTS running at http://${HOST}:${PORT}`);
+  if (HOST === "0.0.0.0" && process.env.TAILNET_HOST) {
+    console.log(`Phone (Tailscale HTTPS): https://${process.env.TAILNET_HOST}/`);
+    console.log(`Phone (Tailscale HTTP):  http://${process.env.TAILNET_HOST}:${PORT}/`);
+  }
   if (!process.env.HUME_API_KEY || process.env.HUME_API_KEY === "your-hume-api-key-here") {
     console.warn(
       `\n⚠  HUME_API_KEY is missing or still the placeholder.\n` +

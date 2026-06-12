@@ -448,6 +448,17 @@
       });
     }
 
+    let wakeLock = null;
+    async function keepAwake() {
+      try {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+        document.addEventListener("visibilitychange", () => {
+          if (wakeLock === null && document.visibilityState === "visible") keepAwake();
+        });
+      } catch {}
+    }
+
     let audioCtx, analyser, gainNode, waveData, freqData;
     let waveCanvas, waveCtx, specCanvas, specCtx;
     let vizRunning = false;
@@ -479,6 +490,7 @@
     function start() {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
+      keepAwake();
 
       gainNode = audioCtx.createGain();
       gainNode.gain.value = 1.0;

@@ -209,6 +209,34 @@ This repo ships a source clip: [`rocky-tts/public/RockyVoice-James.wav`](rocky-t
 
 > Heads up: Hume's API can only *save* a voice from a prior generation, not upload an audio file. Cloning from a recording is a Platform (web) action, which is why this step is done in the browser, not by a script.
 
+## Phone speaker
+
+Rocky can speak through your phone too. The server broadcasts every utterance to all connected browsers, so the phone is just a second listener.
+
+This uses [Tailscale](https://tailscale.com) to give your phone a private route to the desktop. No public exposure, no port forwarding, no cost.
+
+### Setup
+
+1. Install [Tailscale](https://tailscale.com/download) on your desktop and phone. Sign into the same account on both.
+2. Set `HOST=0.0.0.0` in `rocky-tts/.env` so the server accepts connections from the tailnet.
+3. Run `tailscale status` on the desktop and note the MagicDNS name (e.g. `desktop.tailxxxx.ts.net`).
+4. Set `TAILNET_HOST=your-desktop.tailxxxx.ts.net` in `.env` (prints the phone URL on boot).
+5. Proxy HTTPS in front of the server (one time):
+   ```bash
+   tailscale serve --bg 3333
+   ```
+6. Restart the Rocky server (`npm start`). The console prints the phone URL.
+7. On your phone, open the URL and tap **Initialize**.
+
+Rocky now speaks on both devices. Mute whichever you are not using.
+
+### Notes
+
+- **HTTPS vs HTTP.** `tailscale serve` provides HTTPS with a real cert. If HTTPS certs are not provisioned yet, use the Tailscale IP directly: `http://<tailscale-ip>:3333`. Audio works on HTTP; Wake Lock (screen stays on) requires HTTPS.
+- **Wake Lock.** The page requests a screen Wake Lock after you tap Initialize. This keeps the phone screen on while the tab is open and foregrounded. Requires HTTPS (Tailscale serve provides it). If your phone still sleeps, increase the display timeout in your phone settings.
+- **Double audio.** Both tabs play slightly out of sync. Mute one with the volume slider, or just don't open the desktop tab.
+- **Do not use `tailscale funnel`.** That exposes the server to the public internet. `serve` keeps it inside your tailnet.
+
 ## Configuration
 
 All runtime settings live in `rocky-tts/.env`. Copy `.env.example` to `.env`, edit, then **restart the server** for changes to take effect (`npm start`, or restart Claude Code if you use the `SessionStart` hook).
@@ -219,8 +247,9 @@ All runtime settings live in `rocky-tts/.env`. Copy `.env.example` to `.env`, ed
 | `HUME_VOICE_ID` | — | Your cloned Rocky voice id (see [Voice setup](#voice-setup--clone-your-own-rocky-1-minute-one-time)). Leave unset to use the fallback. |
 | `HUME_FALLBACK_VOICE` | `Male English Actor` | Stock Hume voice used until you set `HUME_VOICE_ID`. Any voice name from Hume's Voice Library works. |
 | `ROCKY_SPEED` | `1.25` | Speech speed. Higher = faster, lower = slower. See below. |
-| `HOST` | `127.0.0.1` | Address the server binds to. Default keeps the API private to your machine. |
+| `HOST` | `127.0.0.1` | Address the server binds to. Default keeps the API private to your machine. Set to `0.0.0.0` for phone access via Tailscale (see [Phone speaker](#phone-speaker)). |
 | `PORT` | `3333` | Port the server listens on. If you change it, update the hook URLs and `ROCKY_TTS_URL` to match. |
+| `TAILNET_HOST` | — | Your desktop's Tailscale MagicDNS name. Only used to print the phone URL on boot. See [Phone speaker](#phone-speaker). |
 | `HUME_SECRET_KEY` | — | Not used by the app today. Safe to leave as the placeholder. |
 
 > Your `.env` is gitignored — your keys never get committed. Only `.env.example` (placeholders) is in the repo.
