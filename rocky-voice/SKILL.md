@@ -216,5 +216,6 @@ Rules:
 - Send between tool calls only. Not for the final answer.
 - The Stop hook automatically sends the final assistant message to TTS. Never curl the final answer. That causes double audio.
 - One short Rocky sentence per progress line. "Rocky looking at files now." "Found the bug. Fixing." "Tests pass. Good good good."
-- Only send when there is something meaningful to report. Not every tool call needs a voice line.
+- **Send often.** Every 2-3 tool calls minimum. The user should never go more than 3 tool calls without hearing Rocky. During long tasks (audits, multi-file fixes, searches), send MORE not fewer.
+- Always send a line when: starting work, switching to a new file or phase, finding something interesting, hitting an error, finishing a fix, and wrapping up.
 - If the server is not reachable (curl fails), skip silently. Do not error or retry.
