@@ -57,11 +57,11 @@ npm install
 npm start
 ```
 
-Open **http://localhost:3333** in your browser. Two ways to use it:
+Open **http://localhost:3333** in your browser and click **Initialize** to enable audio.
 
-**Manual** — paste text, click Speak, hear Rocky.
+The Eridian Translator UI shows a waveform visualizer and translation log. It receives audio via the Claude Code hook below. Use the **volume slider** to adjust loudness and the **stop button** to kill audio mid-playback.
 
-**Automatic with Claude Code** — add a Stop hook to your Claude Code settings so Rocky's responses play automatically:
+**Hook setup** — add a Stop hook to your Claude Code settings so Rocky's responses play automatically:
 
 Add this to `.claude/settings.local.json`:
 
@@ -110,7 +110,7 @@ The `Stop` hook sends Rocky's words to the voice server after every response. Th
 }
 ```
 
-Then activate the Rocky skill, open **http://localhost:3333** in your browser, click "enable Rocky voice" once, and every response speaks automatically.
+Then activate the Rocky skill, open **http://localhost:3333** in your browser, click **Initialize** once, and every response speaks automatically.
 
 ### Voice setup — clone your own Rocky (~1 minute, one time)
 
