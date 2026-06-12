@@ -112,6 +112,35 @@ The `Stop` hook sends Rocky's words to the voice server after every response. Th
 
 Then activate the Rocky skill, open **http://localhost:3333** in your browser, click **Initialize** once, and every response speaks automatically.
 
+### Optional: allow Rocky's live progress voice lines
+
+Rocky can narrate what he's doing between tool calls (short spoken updates like "Rocky looking at files now"). These are sent via `curl` to the local TTS server. To avoid a permission prompt on every line, add this to your `.claude/settings.local.json` permissions:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:3333/*)",
+      "Bash(curl -s -o /dev/null *)"
+    ]
+  }
+}
+```
+
+If you already have a `permissions.allow` array (e.g. from the hook setup above), merge these entries into it. After adding, **restart Claude Code** for the wildcard rules to take effect.
+
+### Quick setup checklist (new machine)
+
+1. Clone the repo: `git clone https://github.com/Lagunaswift/RockyVoice.git`
+2. `cd RockyVoice/rocky-tts && cp .env.example .env`
+3. Edit `.env` — add your Hume API key (and optionally clone a Rocky voice, see below)
+4. `npm install && npm start`
+5. Open **http://localhost:3333** and click **Initialize**
+6. Install the Rocky skill: copy `rocky-voice/SKILL.md` into `~/.claude/skills/rocky-voice/`
+7. Add the Stop hook to `.claude/settings.local.json` (see hook setup above)
+8. Optional: add the curl permission rules above for live progress voice lines
+9. Restart Claude Code, activate the Rocky skill, and talk to space friend
+
 ### Voice setup — clone your own Rocky (~1 minute, one time)
 
 Voice clones on Hume are **private to the account that made them** — a shared voice id returns `404` for everyone else. So each person makes their own from the same source audio. Same recording in, same Rocky out.
