@@ -245,6 +245,74 @@
     .theme-dot:hover { opacity: 0.8; transform: scale(1.2); }
     .theme-dot.active { border-color: #fff; opacity: 1; }
 
+    /* Audio controls */
+    .audio-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .stop-btn {
+      font-family: inherit;
+      font-size: 0.4rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border: 1px solid #802020;
+      background: transparent;
+      color: #c04040;
+      cursor: pointer;
+      transition: all 0.2s;
+      opacity: 0.4;
+    }
+
+    .stop-btn:hover { opacity: 1; background: rgba(192,64,64,0.1); }
+    .stop-btn.active { opacity: 1; border-color: #c04040; }
+
+    .vol-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vol-label {
+      font-size: 0.4rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a3a34;
+    }
+
+    .vol-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 70px;
+      height: 3px;
+      background: #1a2a28;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #40e8c8;
+      cursor: pointer;
+      border: none;
+    }
+
+    .vol-slider::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #40e8c8;
+      cursor: pointer;
+      border: none;
+    }
+
     /* Boot screen */
     #startScreen {
       position: fixed;
@@ -306,6 +374,13 @@
       <div class="wave-header">
         <span class="label">Waveform Analysis</span>
         <div class="theme-picker" id="themePicker"></div>
+        <div class="audio-controls">
+          <div class="vol-wrap">
+            <span class="vol-label">Vol</span>
+            <input type="range" class="vol-slider" id="volSlider" min="0" max="100" value="100">
+          </div>
+          <button class="stop-btn" id="stopBtn" onclick="stopAudio()">Stop</button>
+        </div>
         <div class="status disconnected" id="statusBar">
           <span class="dot"></span>
           <span id="statusText">offline</span>
@@ -373,7 +448,7 @@
       });
     }
 
-    let audioCtx, analyser, waveData, freqData;
+    let audioCtx, analyser, gainNode, waveData, freqData;
     let waveCanvas, waveCtx, specCanvas, specCtx;
     let vizRunning = false;
     let activeSpeakers = 0;
@@ -382,18 +457,45 @@
 
     const messageEls = new Map();
     const playState = new Map();
+    const activeSources = new Set();
     let sampleRate = 48000;
     let channels = 1;
     let totalMessages = 0;
+
+    function stopAudio() {
+      for (const src of activeSources) {
+        try { src.stop(); } catch {}
+      }
+      activeSources.clear();
+      for (const [msgId, st] of playState) {
+        if (st.gotAudio) activeSpeakers = Math.max(0, activeSpeakers - 1);
+        else pendingCount = Math.max(0, pendingCount - 1);
+        setEntry(msgId, "done");
+      }
+      playState.clear();
+      updateStatus();
+    }
 
     function start() {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
 
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 1.0;
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.82;
+      gainNode.connect(analyser);
       analyser.connect(audioCtx.destination);
+
+      const volSlider = document.getElementById("volSlider");
+      const saved = localStorage.getItem("rocky-volume");
+      if (saved !== null) { volSlider.value = saved; gainNode.gain.value = saved / 100; }
+      volSlider.addEventListener("input", (e) => {
+        const v = e.target.value / 100;
+        gainNode.gain.value = v;
+        localStorage.setItem("rocky-volume", e.target.value);
+      });
       waveData = new Uint8Array(analyser.fftSize);
       freqData = new Uint8Array(analyser.frequencyBinCount);
 
@@ -637,6 +739,8 @@
       if (activeSpeakers > 0) setStatus("speaking", "translating");
       else if (pendingCount > 0) setStatus("generating", "generating");
       else setStatus("connected", "listening");
+      const btn = document.getElementById("stopBtn");
+      if (btn) btn.classList.toggle("active", activeSpeakers > 0 || pendingCount > 0);
     }
 
     // ---- Messages ----
@@ -707,7 +811,9 @@
 
       const src = audioCtx.createBufferSource();
       src.buffer = audioBuffer;
-      src.connect(analyser);
+      src.connect(gainNode);
+      activeSources.add(src);
+      src.onended = () => activeSources.delete(src);
 
       const now = audioCtx.currentTime;
       if (st.nextTime < now) st.nextTime = now;

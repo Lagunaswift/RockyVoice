@@ -38,6 +38,21 @@ function rockyVoice() {
   return id ? { id } : { name: FALLBACK_VOICE_NAME, provider: "HUME_AI" };
 }
 
+const HOOK_LOG_PATH = path.join(__dirname, "hook-log.jsonl");
+const MAX_HOOK_LOG_BYTES = 512 * 1024; // 512 KB
+let hookLogStream = fs.createWriteStream(HOOK_LOG_PATH, { flags: "a" });
+
+function rotateHookLogIfNeeded() {
+  try {
+    const stat = fs.statSync(HOOK_LOG_PATH);
+    if (stat.size > MAX_HOOK_LOG_BYTES) {
+      hookLogStream.end();
+      fs.renameSync(HOOK_LOG_PATH, HOOK_LOG_PATH + ".old");
+      hookLogStream = fs.createWriteStream(HOOK_LOG_PATH, { flags: "a" });
+    }
+  } catch {}
+}
+
 const sseClients = new Set();
 
 // Most recent Hume generation id, fed back as context so Rocky's prosody
@@ -174,23 +189,32 @@ async function streamSynthesize(text, onChunk) {
   let buf = "";
   let generationId = null;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let nl;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let obj;
-      try {
-        obj = JSON.parse(line);
-      } catch {
-        continue;
+  let gotChunks = false;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        let obj;
+        try {
+          obj = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (obj.generation_id) generationId = obj.generation_id;
+        if (obj.audio) { onChunk(obj.audio); gotChunks = true; }
       }
-      if (obj.generation_id) generationId = obj.generation_id;
-      if (obj.audio) onChunk(obj.audio);
+    }
+  } catch (streamErr) {
+    if (gotChunks) {
+      console.warn("Hume stream interrupted after partial audio:", streamErr.message);
+    } else {
+      throw streamErr;
     }
   }
 
@@ -241,10 +265,8 @@ app.post("/api/speak", async (req, res) => {
 
 app.post("/api/hook", async (req, res) => {
   const hookData = req.body;
-  fs.appendFileSync(
-    path.join(__dirname, "hook-log.jsonl"),
-    JSON.stringify(hookData) + "\n"
-  );
+  hookLogStream.write(JSON.stringify(hookData) + "\n");
+  rotateHookLogIfNeeded();
 
   const raw = hookData.assistant_message || hookData.last_assistant_message || null;
   if (!raw) {
@@ -265,6 +287,13 @@ app.post("/api/hook", async (req, res) => {
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
   console.log(`Rocky TTS running at http://localhost:${PORT}`);
+  if (!process.env.HUME_API_KEY || process.env.HUME_API_KEY === "your-hume-api-key-here") {
+    console.warn(
+      `\n⚠  HUME_API_KEY is missing or still the placeholder.\n` +
+      `   TTS will fail until you set a real key in .env.\n` +
+      `   Get one at https://platform.hume.ai\n`
+    );
+  }
   if (configuredVoiceId()) {
     console.log(`Voice: cloned (HUME_VOICE_ID=${configuredVoiceId()})`);
   } else {
